@@ -1,5 +1,6 @@
 # main.py
-
+import json
+import ast
 from api_requests.get_request import get_request
 from api_requests.post_request import post_request
 if __name__ == "__main__":
@@ -20,6 +21,13 @@ if __name__ == "__main__":
     chargestate = get_request(url_chargestate) #, topic="charge state of the car"
     
     print(chargestate) 
+   
+    price_per_hour_list = ast.literal_eval(price_per_hour)
+    sum_of_prices = sum(float(price) for price in price_per_hour_list)
+    print("sum of prices", sum_of_prices)
+    average_price = sum_of_prices/24
+    
+    print("average price",average_price)
     
     if float(chargestate) < 79.94: 
         charging_on = post_request(url_charge_control, charging=True)
