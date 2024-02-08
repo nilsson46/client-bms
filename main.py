@@ -1,15 +1,14 @@
 # main.py
 import json
-import ast
+#import ast
 import time 
-from api_requests.discharge import discharge_on
+#from api_requests.discharge import discharge_on
 from api_requests.get_request import get_request
 from api_requests.post_request import post_request
-def format_time(hour):
-    if hour < 10:
-        return f"0{hour}:00"
-    else:
-        return f"{hour}:00"
+def format_time(hour, minute):
+    formatted_hour = f"0{hour}" if hour < 10 else str(hour)
+    formatted_minute = f"0{minute}" if minute < 10 else str(minute)
+    return f"{formatted_hour}:{formatted_minute}"
 
 if __name__ == "__main__":
     
@@ -21,52 +20,53 @@ if __name__ == "__main__":
     
     #Post
     url_charge_control = "http://127.0.0.1:5000/charge"
-    discharge_url = "http://127.0.0.1:5000/discharge"
+    #discharge_url = "http://127.0.0.1:5000/discharge"
     
     charging = False
     
-    for _ in range(24):
+    for _ in range(96):
+
         baseload_response = get_request(url_baseload)
         info_response = get_request(url_info) 
-
+        price_per_hour_response = get_request(url_priceperhour)
         try:
-            # Försök konvertera serverresponsen till JSON
+
             baseload_data = json.loads(baseload_response)
             info_data = json.loads(info_response)
+            price_per_hour_data = json.loads(price_per_hour_response)
             
-            # Om "sim_time_hour" finns i JSON, hämta värdet
-            if "sim_time_hour" in info_data:
+
+            if "sim_time_hour" in info_data and "sim_time_min" in info_data:
                 time_hour = info_data["sim_time_hour"]
-                formatted_time = format_time(time_hour)
+                time_minute = info_data["sim_time_min"]
+                formatted_time = format_time(time_hour, time_minute)
                 print(f"\n********** Time: {formatted_time} **********")
 
-                # Kontrollera att det finns en lista med priser
-                price_per_hour_list = ast.literal_eval(get_request(url_priceperhour))
-                baseload_per_hour = baseload_data
+                price_per_hour_list = price_per_hour_data
+                baseload_per_hour_list = baseload_data
                 
                 if price_per_hour_list:
                     found = False
-                    # Iterera över varje timme i listan
+
                     for i, hourly_price in enumerate(price_per_hour_list):
-                        # Jämför med "sim_time_hour"
+
                         if i == time_hour:
-                            print(f"Price: {hourly_price} kr/kWh")
+                            print(f"Price: {hourly_price} öre/kWh")
                             found = True
                             break
 
-                    # Om timmen inte hittades i listan
                     if not found:
                         print(f"Hour {time_hour} didnt found in price list.")
                 else:
                     print("List of prices is empty.")
                 
-                if baseload_per_hour:
-                    hourly_baseload = baseload_per_hour[time_hour]
+                if baseload_per_hour_list:
+                    hourly_baseload = baseload_per_hour_list[time_hour]
                     print(f"Baseload: {hourly_baseload} kWh")
                 else:
                     print("Baseload list is empty.")
                     
-                # Utskrift av batterikapacitet och aktuell basbelastning
+                
                 print(f"Battery capacity: {info_data['battery_capacity_kWh']} kWh")
                 print(f"Acutal baseload: {info_data['base_current_load']} kWh")
                     
@@ -77,19 +77,16 @@ if __name__ == "__main__":
             print("Error decoding JSON response.")
         
         chargestate = get_request(url_chargestate)
-        print(f"Chargestate: {chargestate} %")
+        print(f"Chargestate: {chargestate}%")
     
         sum_of_prices = sum(float(price) for price in price_per_hour_list)
         average_price = sum_of_prices/24
         
-        sum_of_baseload = sum(float(baseload) for baseload in baseload_per_hour)
+        sum_of_baseload = sum(float(baseload) for baseload in baseload_per_hour_list)
         average_usage = sum_of_baseload/24
         
-        if time_hour == 16: 
-            discharge_on(discharge_url)
         
-        # Ladda bara om timpriset är mindre än det genomsnittliga priset och laddningsstaten är mindre än 79.94%
-        if hourly_price <= average_price and float(chargestate) < 79.94:
+        if hourly_price <= average_price and hourly_baseload <= 11 and hourly_baseload <= average_usage and float(chargestate) < 79.94:
             if not charging:
                 charging_on = post_request(url_charge_control, charging=True)
                 charging = True
@@ -101,4 +98,4 @@ if __name__ == "__main__":
                 charging = False
                 print("Charging turned OFF")
                 
-        time.sleep(4)
+        time.sleep(1)
